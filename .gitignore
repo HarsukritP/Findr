@@ -1,0 +1,4 @@
+/backend/venv
+/backend/.env
+/backend/gcp_key.json
+
