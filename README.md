@@ -4,24 +4,14 @@
 
 ## 🚀 How It Works
 
-### 1. 🧠 AI-Enhanced User Profiles  
-Users create a profile by entering:
-- Skills  
-- Experience level  
-- Hackathon interests  
-- Availability  
-
-AI then auto-generates a compelling profile summary, helping users stand out and making them easier to discover by potential teammates.
-
+### 1. 🧠 AI Created User Profiles  
+Users create a profile by entering an png, jpg or pdf
 ---
 
 ### 2. 🤝 Smart Matching & Swiping  
 - **Swipe right** to match with potential teammates  
 - **Swipe left** to pass  
 - Once matched with **2+ users**, you can form a team
-
-You can also skip swiping entirely and let AI handle team formation based on skills, balance, and availability.
-
 ---
 
 ### 3. 📄 Resume & Portfolio Insights  
@@ -32,24 +22,13 @@ You can also skip swiping entirely and let AI handle team formation based on ski
   > "You and Alex both love AI & have complementary skills in backend/frontend."
 
 ---
-
 ## ✨ Key Features
 
 ✅ **AI-Powered Team Formation**  
 Form teams based on skill compatibility, experience balance, and availability.
 
-✅ **Flexible Matching System**  
-Choose between swipe-based or AI-driven team building.
-
-✅ **Hackathon Idea Generator**  
-Stuck on what to build? Get AI-generated project ideas tailored to your team’s strengths.
-
-✅ **AI Chatbot for Planning & Collaboration**  
-Built-in team chatbot to help brainstorm, plan tasks, and collaborate effectively.
-
 ✅ **Smart Portfolio Analysis**  
 Find the gaps in your team and receive suggestions to fill missing roles with the right people.
-
 ---
 
 ## 🛠 Tech Stack
