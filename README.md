@@ -56,7 +56,7 @@ Find the gaps in your team and receive suggestions to fill missing roles with th
 - **Frontend:** React + Vite  
 - **Backend:** Flask / FastAPI  
 - **Database:** MongoDB Atlas  
-- **AI Integration:** GPT (for summaries, suggestions, analysis)  
+- **AI Integration:** Google Vision For Analyzing Documents, Gemini to create profile descriptions
 - **Authentication:** GCP Identity Platform (Firebase Auth)  
 - **APIs:** GitHub, LinkedIn (future integration)
 
