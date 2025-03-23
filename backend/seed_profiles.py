@@ -1,353 +1,196 @@
-import os
-from dotenv import load_dotenv
 from pymongo import MongoClient
 from datetime import datetime
-import pathlib
+import bcrypt
+import os
+from dotenv import load_dotenv
 
 # Load environment variables
-current_dir = pathlib.Path(__file__).parent.resolve()
-load_dotenv(current_dir / ".env")
+load_dotenv()
 
-# Connect to MongoDB
-client = MongoClient(os.getenv("MONGODB_URI"))
-db = client["findr"]
-users_collection = db.users
+# MongoDB connection
+MONGODB_URI = "mongodb+srv://mongodb:mongodb@cluster0.nicfu.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0"
+client = MongoClient(MONGODB_URI)
+db = client.findr
 
-# Sample data
-sample_profiles = [
+# Clear existing data
+db.users.delete_many({})
+db.matches.delete_many({})
+db.swipes.delete_many({})
+
+# Sample user data
+users = [
     {
-        "email": "sarah.code@example.com",
-        "password": "password123",
-        "name": "Sarah Chen",
-        "skills": ["Python", "React", "Machine Learning", "TensorFlow"],
+        "email": "alex.tech@example.com",
+        "password": bcrypt.hashpw("password123".encode(), bcrypt.gensalt()),
+        "name": "Alex Chen",
+        "school": "MIT",
+        "background": "Computer Science major with a focus on AI/ML. Looking for teammates who are passionate about innovative tech solutions.",
+        "skills": ["Python", "TensorFlow", "React", "Node.js"],
         "experience": [
-            "ML Engineer at Tech Corp",
-            "Research Assistant at University AI Lab",
-            "Published paper on Neural Networks"
+            "ML Research Assistant at MIT Lab",
+            "Built a real-time object detection system",
+            "Led university hackathon team to first place"
         ],
-        "tags": ["AI/ML", "Full Stack", "Research", "Deep Learning"],
-        "background": "Computer Science graduate with focus on AI",
-        "school": "Stanford University",
+        "tags": ["AI/ML", "Full Stack", "Innovation", "Algorithms"],
+        "profile_completed": True,
+        "created_at": datetime.utcnow()
+    },
+    {
+        "email": "sarah.design@example.com",
+        "password": bcrypt.hashpw("password123".encode(), bcrypt.gensalt()),
+        "name": "Sarah Wilson",
+        "school": "Rhode Island School of Design",
+        "background": "UI/UX designer with a passion for creating intuitive user experiences. Seeking developers to bring designs to life.",
+        "skills": ["Figma", "Adobe XD", "UI/UX", "Prototyping"],
+        "experience": [
+            "Design intern at Google",
+            "Freelance UI designer for startups",
+            "Created design system for university app"
+        ],
+        "tags": ["Design", "Creative", "User Experience", "Mobile"],
         "profile_completed": True,
         "created_at": datetime.utcnow()
     },
     {
         "email": "mike.dev@example.com",
-        "password": "password123",
-        "name": "Mike Rodriguez",
-        "skills": ["JavaScript", "Node.js", "AWS", "MongoDB"],
+        "password": bcrypt.hashpw("password123".encode(), bcrypt.gensalt()),
+        "name": "Mike Johnson",
+        "school": "Stanford University",
+        "background": "Backend developer specializing in scalable systems. Looking for frontend developers and designers.",
+        "skills": ["Java", "Spring Boot", "AWS", "MongoDB"],
         "experience": [
-            "Full Stack Developer at StartupX",
-            "Software Engineer Intern at Google",
-            "Created popular npm package"
+            "Software Engineer at Amazon",
+            "Built microservices architecture for startup",
+            "Open source contributor to Spring framework"
         ],
-        "tags": ["Backend", "Cloud", "Open Source", "Startups"],
-        "background": "Self-taught programmer with 5 years experience",
-        "school": "Boot Camp Graduate",
+        "tags": ["Backend", "Cloud", "Scalability", "DevOps"],
         "profile_completed": True,
         "created_at": datetime.utcnow()
     },
     {
-        "email": "emily.ui@example.com",
-        "password": "password123",
-        "name": "Emily Taylor",
-        "skills": ["UI/UX", "Figma", "HTML/CSS", "React"],
-        "experience": [
-            "UI Designer at Design Studio",
-            "Freelance Web Designer",
-            "Created viral mobile app interface"
-        ],
-        "tags": ["Design", "Frontend", "Mobile", "Creative"],
-        "background": "Design school graduate with coding skills",
-        "school": "Rhode Island School of Design",
-        "profile_completed": True,
-        "created_at": datetime.utcnow()
-    },
-    {
-        "email": "alex.data@example.com",
-        "password": "password123",
-        "name": "Alex Kim",
-        "skills": ["SQL", "Python", "Tableau", "R"],
-        "experience": [
-            "Data Analyst at Finance Corp",
-            "Business Intelligence Developer",
-            "Created predictive models for retail"
-        ],
-        "tags": ["Data Science", "Analytics", "Finance", "Visualization"],
-        "background": "Economics major with strong technical skills",
+        "email": "emily.product@example.com",
+        "password": bcrypt.hashpw("password123".encode(), bcrypt.gensalt()),
+        "name": "Emily Zhang",
         "school": "UC Berkeley",
-        "profile_completed": True,
-        "created_at": datetime.utcnow()
-    },
-    {
-        "email": "jordan.security@example.com",
-        "password": "password123",
-        "name": "Jordan Patel",
-        "skills": ["Cybersecurity", "Python", "Network Security", "Ethical Hacking"],
+        "background": "Product Manager with technical background. Looking for talented developers to build innovative products.",
+        "skills": ["Product Strategy", "Agile", "SQL", "Data Analysis"],
         "experience": [
-            "Security Engineer at Bank",
-            "Penetration Tester",
-            "Bug bounty hunter"
+            "PM at Microsoft",
+            "Founded tech startup",
+            "Led development of enterprise SaaS platform"
         ],
-        "tags": ["Security", "Privacy", "Blockchain", "Cryptography"],
-        "background": "Cybersecurity specialist with CISSP certification",
-        "school": "Georgia Tech",
+        "tags": ["Product", "Leadership", "Strategy", "Analytics"],
         "profile_completed": True,
         "created_at": datetime.utcnow()
     },
     {
-        "email": "rachel.mobile@example.com",
-        "password": "password123",
-        "name": "Rachel Wong",
-        "skills": ["Swift", "Kotlin", "React Native", "Firebase"],
+        "email": "david.mobile@example.com",
+        "password": bcrypt.hashpw("password123".encode(), bcrypt.gensalt()),
+        "name": "David Kim",
+        "school": "Georgia Tech",
+        "background": "Mobile developer with expertise in iOS and Android. Seeking UI/UX designers and backend developers.",
+        "skills": ["Swift", "Kotlin", "Flutter", "Firebase"],
         "experience": [
-            "iOS Developer at Mobile Studio",
-            "Android Developer",
-            "Published multiple apps"
+            "iOS Developer at Apple",
+            "Created popular fitness tracking app",
+            "Mobile development instructor"
         ],
         "tags": ["Mobile", "iOS", "Android", "Cross-platform"],
-        "background": "Mobile development expert",
+        "profile_completed": True,
+        "created_at": datetime.utcnow()
+    },
+    {
+        "email": "rachel.data@example.com",
+        "password": bcrypt.hashpw("password123".encode(), bcrypt.gensalt()),
+        "name": "Rachel Martinez",
+        "school": "Carnegie Mellon University",
+        "background": "Data Scientist passionate about ML and AI. Looking for engineers to build intelligent systems.",
+        "skills": ["Python", "PyTorch", "SQL", "Data Visualization"],
+        "experience": [
+            "Data Scientist at Netflix",
+            "Built recommendation systems",
+            "Published ML research paper"
+        ],
+        "tags": ["Data Science", "Machine Learning", "Analytics", "Research"],
+        "profile_completed": True,
+        "created_at": datetime.utcnow()
+    },
+    {
+        "email": "james.security@example.com",
+        "password": bcrypt.hashpw("password123".encode(), bcrypt.gensalt()),
+        "name": "James Thompson",
+        "school": "NYU",
+        "background": "Cybersecurity specialist focusing on web security. Looking for web developers interested in secure applications.",
+        "skills": ["Penetration Testing", "Python", "Network Security", "Cryptography"],
+        "experience": [
+            "Security Engineer at Microsoft",
+            "Bug bounty hunter",
+            "Security consultant for startups"
+        ],
+        "tags": ["Security", "Ethical Hacking", "Web Security", "Privacy"],
+        "profile_completed": True,
+        "created_at": datetime.utcnow()
+    },
+    {
+        "email": "lisa.frontend@example.com",
+        "password": bcrypt.hashpw("password123".encode(), bcrypt.gensalt()),
+        "name": "Lisa Anderson",
         "school": "University of Washington",
-        "profile_completed": True,
-        "created_at": datetime.utcnow()
-    },
-    {
-        "email": "david.game@example.com",
-        "password": "password123",
-        "name": "David Martinez",
-        "skills": ["Unity", "C#", "3D Modeling", "Game Design"],
+        "background": "Frontend developer specializing in modern web frameworks. Looking for backend developers and designers.",
+        "skills": ["React", "Vue.js", "TypeScript", "Tailwind CSS"],
         "experience": [
-            "Game Developer at Gaming Studio",
-            "Indie Game Creator",
-            "Won Game Jam competition"
+            "Frontend Engineer at Facebook",
+            "Built component library used by 100+ developers",
+            "Web accessibility advocate"
         ],
-        "tags": ["Gaming", "VR/AR", "Unity", "Game Design"],
-        "background": "Game development enthusiast",
-        "school": "DigiPen Institute",
-        "profile_completed": True,
-        "created_at": datetime.utcnow()
-    },
-    {
-        "email": "lisa.cloud@example.com",
-        "password": "password123",
-        "name": "Lisa Johnson",
-        "skills": ["AWS", "Docker", "Kubernetes", "Terraform"],
-        "experience": [
-            "DevOps Engineer at Cloud Corp",
-            "System Administrator",
-            "Cloud Architecture Consultant"
-        ],
-        "tags": ["DevOps", "Cloud", "Infrastructure", "Automation"],
-        "background": "Cloud infrastructure specialist",
-        "school": "MIT",
+        "tags": ["Frontend", "Web Development", "UI", "Accessibility"],
         "profile_completed": True,
         "created_at": datetime.utcnow()
     },
     {
         "email": "kevin.blockchain@example.com",
-        "password": "password123",
-        "name": "Kevin Zhang",
-        "skills": ["Solidity", "Web3.js", "Smart Contracts", "DeFi"],
+        "password": bcrypt.hashpw("password123".encode(), bcrypt.gensalt()),
+        "name": "Kevin Patel",
+        "school": "University of Toronto",
+        "background": "Blockchain developer interested in Web3 projects. Seeking full-stack developers and smart contract experts.",
+        "skills": ["Solidity", "Web3.js", "Ethereum", "Smart Contracts"],
         "experience": [
-            "Blockchain Developer at Crypto Startup",
-            "Smart Contract Auditor",
-            "Created DeFi protocol"
+            "Smart Contract Developer at ConsenSys",
+            "Created DeFi protocol",
+            "Blockchain workshop instructor"
         ],
-        "tags": ["Blockchain", "DeFi", "Web3", "Crypto"],
-        "background": "Blockchain technology expert",
-        "school": "Cornell University",
+        "tags": ["Blockchain", "Web3", "DeFi", "Cryptocurrency"],
         "profile_completed": True,
         "created_at": datetime.utcnow()
     },
     {
-        "email": "nina.product@example.com",
-        "password": "password123",
-        "name": "Nina Brown",
-        "skills": ["Product Management", "Agile", "Data Analysis", "UX Research"],
-        "experience": [
-            "Product Manager at Tech Company",
-            "Business Analyst",
-            "Led product launches"
-        ],
-        "tags": ["Product", "Strategy", "Leadership", "Agile"],
-        "background": "Product manager with technical background",
-        "school": "Harvard Business School",
-        "profile_completed": True,
-        "created_at": datetime.utcnow()
-    },
-    {
-        "email": "tom.embedded@example.com",
-        "password": "password123",
-        "name": "Tom Wilson",
-        "skills": ["C++", "Arduino", "IoT", "Embedded Systems"],
-        "experience": [
-            "Embedded Systems Engineer",
-            "Hardware Developer",
-            "IoT Project Lead"
-        ],
-        "tags": ["IoT", "Hardware", "Robotics", "Embedded"],
-        "background": "Electrical engineering background",
-        "school": "Caltech",
-        "profile_completed": True,
-        "created_at": datetime.utcnow()
-    },
-    {
-        "email": "maya.ai@example.com",
-        "password": "password123",
-        "name": "Maya Gupta",
-        "skills": ["PyTorch", "NLP", "Computer Vision", "Deep Learning"],
-        "experience": [
-            "AI Researcher at Tech Lab",
-            "Machine Learning Engineer",
-            "Published AI papers"
-        ],
-        "tags": ["AI", "Research", "Deep Learning", "Innovation"],
-        "background": "PhD in Machine Learning",
-        "school": "Carnegie Mellon University",
-        "profile_completed": True,
-        "created_at": datetime.utcnow()
-    },
-    {
-        "email": "chris.testing@example.com",
-        "password": "password123",
-        "name": "Chris Lee",
-        "skills": ["Test Automation", "Selenium", "Jenkins", "QA"],
-        "experience": [
-            "QA Lead at Software Corp",
-            "Test Automation Engineer",
-            "Quality Assurance Manager"
-        ],
-        "tags": ["Testing", "QA", "Automation", "CI/CD"],
-        "background": "Quality assurance professional",
-        "school": "University of Michigan",
-        "profile_completed": True,
-        "created_at": datetime.utcnow()
-    },
-    {
-        "email": "anna.frontend@example.com",
-        "password": "password123",
-        "name": "Anna Kowalski",
-        "skills": ["Vue.js", "TypeScript", "GraphQL", "Sass"],
-        "experience": [
-            "Frontend Developer at Web Agency",
-            "UI Engineer",
-            "Created component library"
-        ],
-        "tags": ["Frontend", "UI", "Design Systems", "Web"],
-        "background": "Frontend development specialist",
-        "school": "NYU",
-        "profile_completed": True,
-        "created_at": datetime.utcnow()
-    },
-    {
-        "email": "james.backend@example.com",
-        "password": "password123",
-        "name": "James Anderson",
-        "skills": ["Java", "Spring Boot", "Microservices", "Kafka"],
-        "experience": [
-            "Backend Engineer at Enterprise Corp",
-            "Java Developer",
-            "System Architect"
-        ],
-        "tags": ["Backend", "Java", "Architecture", "Enterprise"],
-        "background": "Enterprise software developer",
-        "school": "University of Illinois",
-        "profile_completed": True,
-        "created_at": datetime.utcnow()
-    },
-    {
-        "email": "sophia.ar@example.com",
-        "password": "password123",
-        "name": "Sophia Garcia",
-        "skills": ["AR/VR", "Unity", "3D Design", "Motion Tracking"],
-        "experience": [
-            "AR Developer at Tech Studio",
-            "VR Experience Designer",
-            "Created AR mobile game"
-        ],
-        "tags": ["AR", "VR", "Gaming", "Interactive"],
-        "background": "AR/VR development specialist",
+        "email": "nina.game@example.com",
+        "password": bcrypt.hashpw("password123".encode(), bcrypt.gensalt()),
+        "name": "Nina Rodriguez",
         "school": "USC",
-        "profile_completed": True,
-        "created_at": datetime.utcnow()
-    },
-    {
-        "email": "ryan.data@example.com",
-        "password": "password123",
-        "name": "Ryan Murphy",
-        "skills": ["Big Data", "Hadoop", "Spark", "Data Engineering"],
+        "background": "Game developer with passion for VR/AR. Looking for 3D artists and Unity developers.",
+        "skills": ["Unity", "C#", "3D Graphics", "AR/VR Development"],
         "experience": [
-            "Data Engineer at Big Tech",
-            "Big Data Architect",
-            "Built data pipelines"
+            "Game Developer at Riot Games",
+            "Published indie game on Steam",
+            "VR experience designer"
         ],
-        "tags": ["Big Data", "Data Engineering", "Analytics", "Cloud"],
-        "background": "Data engineering expert",
-        "school": "University of Texas",
-        "profile_completed": True,
-        "created_at": datetime.utcnow()
-    },
-    {
-        "email": "olivia.design@example.com",
-        "password": "password123",
-        "name": "Olivia Thompson",
-        "skills": ["UI Design", "Adobe XD", "Sketch", "Design Systems"],
-        "experience": [
-            "Product Designer at Design Firm",
-            "UX Researcher",
-            "Design System Lead"
-        ],
-        "tags": ["Design", "UX", "Research", "Systems"],
-        "background": "Product design specialist",
-        "school": "Parsons School of Design",
-        "profile_completed": True,
-        "created_at": datetime.utcnow()
-    },
-    {
-        "email": "daniel.ml@example.com",
-        "password": "password123",
-        "name": "Daniel Kim",
-        "skills": ["Machine Learning", "Data Science", "Python", "Scikit-learn"],
-        "experience": [
-            "ML Engineer at AI Startup",
-            "Data Scientist",
-            "Research Assistant"
-        ],
-        "tags": ["ML", "AI", "Research", "Analytics"],
-        "background": "Machine learning engineer",
-        "school": "UCLA",
-        "profile_completed": True,
-        "created_at": datetime.utcnow()
-    },
-    {
-        "email": "emma.security@example.com",
-        "password": "password123",
-        "name": "Emma Davis",
-        "skills": ["Network Security", "Penetration Testing", "Security Auditing", "CISSP"],
-        "experience": [
-            "Security Consultant",
-            "Network Security Engineer",
-            "Security Analyst"
-        ],
-        "tags": ["Security", "Networks", "Compliance", "Risk"],
-        "background": "Information security professional",
-        "school": "Rochester Institute of Technology",
+        "tags": ["Gaming", "VR/AR", "Unity", "Game Design"],
         "profile_completed": True,
         "created_at": datetime.utcnow()
     }
 ]
 
-def seed_database():
-    try:
-        # Clear existing profiles
-        users_collection.delete_many({})
-        
-        # Insert new profiles
-        result = users_collection.insert_many(sample_profiles)
-        print(f"✅ Successfully added {len(result.inserted_ids)} sample profiles to the database")
-        
-    except Exception as e:
-        print(f"❌ Error seeding database: {str(e)}")
+# Insert users into database
+result = db.users.insert_many(users)
 
-if __name__ == "__main__":
-    seed_database() 
+print(f"✅ Successfully inserted {len(result.inserted_ids)} users")
+print("Sample user credentials for testing:")
+print("Email: alex.tech@example.com")
+print("Password: password123")
+print("\nDatabase counts:")
+print(f"Users: {db.users.count_documents({})}")
+print(f"Matches: {db.matches.count_documents({})}")
+print(f"Swipes: {db.swipes.count_documents({})}")
+
+client.close()

@@ -18,6 +18,7 @@ from datetime import datetime
 import json
 from bson import ObjectId
 import PyPDF2
+from bson.errors import InvalidId
 
 # Load environment variables from .env file
 current_dir = pathlib.Path(__file__).parent.resolve()
@@ -224,33 +225,56 @@ async def create_profile(user_id: str, profile: UserProfile):
         )
 
 @app.get("/profiles")
-async def get_profiles(skip: int = 0, limit: int = 10):
+async def get_profiles(user_id: str):
     try:
-        # Get all profiles
-        profiles = list(users_collection.find(
-            {"profile_completed": True},  # Only get documents that have a completed profile
-            {
-                "_id": 1,
-                "name": 1,
-                "skills": 1,
-                "experience": 1,
-                "tags": 1,
-                "background": 1,
-                "school": 1
-            }
-        ).skip(skip).limit(limit))
+        if not user_id or user_id == "null":
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid user_id provided"
+            )
+        
+        current_user_id = ObjectId(user_id)
+        
+        # Get all swipes by the current user
+        swipes = list(swipes_collection.find({"swiper_id": current_user_id}))
+        swiped_ids = [swipe["swiped_id"] for swipe in swipes]
+        
+        # Get all matches involving the current user
+        matches = list(matches_collection.find({
+            "$or": [
+                {"user1_id": current_user_id},
+                {"user2_id": current_user_id}
+            ]
+        }))
+        matched_ids = []
+        for match in matches:
+            matched_ids.append(match["user1_id"] if match["user1_id"] != current_user_id else match["user2_id"])
+        
+        # Find all profiles except:
+        # 1. Current user
+        # 2. Users they've already swiped on
+        # 3. Users they've matched with
+        profiles = list(users_collection.find({
+            "_id": {
+                "$nin": [current_user_id] + swiped_ids + matched_ids
+            },
+            "profile_completed": True
+        }))
         
         # Convert ObjectId to string for JSON serialization
         for profile in profiles:
             profile["_id"] = str(profile["_id"])
         
-        print("Fetched profiles:", profiles)  # Debug log
         return profiles
+    except InvalidId:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid user_id format"
+        )
     except Exception as e:
-        print("Error fetching profiles:", str(e))  # Debug log
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Database error: {str(e)}"
+            detail=str(e)
         )
 
 @app.get("/profile/{user_id}")
@@ -300,120 +324,109 @@ async def analyze_resume(user_id: str, file: UploadFile = File(...)):
         
         # Extract text based on file type
         if file.filename.endswith('.pdf'):
-            # Handle PDF
             pdf_reader = PyPDF2.PdfReader(io.BytesIO(content))
             document_text = ""
             for page in pdf_reader.pages:
                 document_text += page.extract_text()
         else:
-            # Handle image using Google Vision
             vision_client = vision.ImageAnnotatorClient()
             image = types.Image(content=content)
             response = vision_client.text_detection(image=image)
             texts = response.text_annotations
-            
             if not texts:
-                raise HTTPException(
-                    status_code=400,
-                    detail="No text detected in the document"
-                )
+                raise HTTPException(status_code=400, detail="No text detected")
             document_text = texts[0].description
-        
+
         if not document_text:
-            raise HTTPException(
-                status_code=400,
-                detail="No text could be extracted from the document"
-            )
+            raise HTTPException(status_code=400, detail="No text extracted")
         
         print("Extracted text:", document_text[:500])  # Debug log
         
-        # Initialize Gemini
         gemini_model = genai.GenerativeModel('gemini-1.5-flash')
         
         def clean_json_response(response_text):
-            # Remove any markdown formatting or extra text
             text = response_text.strip()
             if '```json' in text:
                 text = text.split('```json')[1].split('```')[0].strip()
             elif '```' in text:
                 text = text.split('```')[1].split('```')[0].strip()
             return text
+
+        # Extract email with more specific prompt
+        email_prompt = """
+        Extract ONLY the email address from this resume text. Look for standard email patterns like xxx@xxx.xxx.
+        If multiple emails exist, take the primary/first one. If no email is found, return an empty string.
+        Output in this EXACT format (just the JSON, no other text):
+        {"contact_email": "example@email.com"}
         
-        try:
-            # Extract basic information
-            basic_prompt = """
-            Given the following resume text, extract ONLY the person's full name, education/school, and a brief background summary.
-            
-            Output the information in this EXACT format (do not include any other text or explanation):
-            {"name": "John Smith", "school": "University Name", "background": "Brief background"}
-            
-            Resume text:
-            """ + document_text
-            
-            basic_response = gemini_model.generate_content(basic_prompt)
-            basic_text = clean_json_response(basic_response.text)
-            print("Basic response:", basic_text)  # Debug log
-            basic_data = json.loads(basic_text)
-            
-            # Extract skills
-            skills_prompt = """
-            Extract a list of technical and soft skills from this resume.
-            
-            Output ONLY a JSON array in this EXACT format (no other text):
-            ["Python", "JavaScript", "Leadership"]
-            
-            Resume text:
-            """ + document_text
-            
-            skills_response = gemini_model.generate_content(skills_prompt)
-            skills_text = clean_json_response(skills_response.text)
-            print("Skills response:", skills_text)  # Debug log
-            skills_data = json.loads(skills_text)
-            
-            # Extract experience
-            experience_prompt = """
-            Extract the main experiences (jobs, internships, projects) from this resume.
-            
-            Output ONLY a JSON array in this EXACT format (no other text):
-            ["Software Engineer at Company X", "Web Development Intern", "Machine Learning Project"]
-            
-            Resume text:
-            """ + document_text
-            
-            experience_response = gemini_model.generate_content(experience_prompt)
-            experience_text = clean_json_response(experience_response.text)
-            print("Experience response:", experience_text)  # Debug log
-            experience_data = json.loads(experience_text)
-            
-            # Generate tags
-            tags_prompt = """
-            Based on this resume, generate relevant tags for hackathon team matching.
-            Include technical areas, interests, and potential roles.
-            
-            Output ONLY a JSON array in this EXACT format (no other text):
-            ["Frontend", "AI/ML", "Team Lead"]
-            
-            Resume text:
-            """ + document_text
-            
-            tags_response = gemini_model.generate_content(tags_prompt)
-            tags_text = clean_json_response(tags_response.text)
-            print("Tags response:", tags_text)  # Debug log
-            tags_data = json.loads(tags_text)
-            
-        except json.JSONDecodeError as e:
-            print("JSON decode error:", str(e))  # Debug log
-            print("Failed response text:", basic_response.text)  # Debug log
-            raise HTTPException(
-                status_code=500,
-                detail="Failed to parse AI response. Please try again."
-            )
-        except Exception as e:
-            print("Error in AI processing:", str(e))  # Debug log
-            raise HTTPException(
-                status_code=500,
-                detail="Error processing resume with AI. Please try again."
-            )
+        Resume text:
+        """ + document_text
+
+        email_response = gemini_model.generate_content(email_prompt)
+        email_text = clean_json_response(email_response.text)
+        print("Email response:", email_text)  # Debug log
+        email_data = json.loads(email_text)
+        
+        # Extract basic information
+        basic_prompt = """
+        Given the following resume text, extract ONLY the person's full name, education/school, and a brief background summary.
+        
+        Output the information in this EXACT format (do not include any other text or explanation):
+        {"name": "John Smith", "school": "University Name", "background": "Brief background"}
+        
+        Resume text:
+        """ + document_text
+        
+        basic_response = gemini_model.generate_content(basic_prompt)
+        basic_text = clean_json_response(basic_response.text)
+        print("Basic response:", basic_text)  # Debug log
+        basic_data = json.loads(basic_text)
+        
+        # Extract skills
+        skills_prompt = """
+        Extract a list of technical and soft skills from this resume.
+        
+        Output ONLY a JSON array in this EXACT format (no other text):
+        ["Python", "JavaScript", "Leadership"]
+        
+        Resume text:
+        """ + document_text
+        
+        skills_response = gemini_model.generate_content(skills_prompt)
+        skills_text = clean_json_response(skills_response.text)
+        print("Skills response:", skills_text)  # Debug log
+        skills_data = json.loads(skills_text)
+        
+        # Extract experience
+        experience_prompt = """
+        Extract the main experiences (jobs, internships, projects) from this resume.
+        
+        Output ONLY a JSON array in this EXACT format (no other text):
+        ["Software Engineer at Company X", "Web Development Intern", "Machine Learning Project"]
+        
+        Resume text:
+        """ + document_text
+        
+        experience_response = gemini_model.generate_content(experience_prompt)
+        experience_text = clean_json_response(experience_response.text)
+        print("Experience response:", experience_text)  # Debug log
+        experience_data = json.loads(experience_text)
+        
+        # Generate tags
+        tags_prompt = """
+        Based on this resume, generate relevant tags for hackathon team matching.
+        Include technical areas, interests, and potential roles.
+        
+        Output ONLY a JSON array in this EXACT format (no other text):
+        ["Frontend", "AI/ML", "Team Lead"]
+        
+        Resume text:
+        """ + document_text
+        
+        tags_response = gemini_model.generate_content(tags_prompt)
+        tags_text = clean_json_response(tags_response.text)
+        print("Tags response:", tags_text)  # Debug log
+        tags_data = json.loads(tags_text)
         
         # Combine all data
         profile_data = {
@@ -422,10 +435,11 @@ async def analyze_resume(user_id: str, file: UploadFile = File(...)):
             "background": basic_data["background"],
             "skills": skills_data,
             "experience": experience_data,
-            "tags": tags_data
+            "tags": tags_data,
+            "contact_email": email_data.get("contact_email", "")  # Add email to profile
         }
         
-        print("Final profile data:", profile_data)  # Debug log
+        print("Profile data with email:", profile_data)  # Debug log
         
         # Update user's profile in MongoDB
         object_id = ObjectId(user_id)
@@ -442,10 +456,7 @@ async def analyze_resume(user_id: str, file: UploadFile = File(...)):
         )
         
         if result.modified_count == 0:
-            raise HTTPException(
-                status_code=404,
-                detail="User not found"
-            )
+            raise HTTPException(status_code=404, detail="User not found")
         
         return {
             "message": "Profile generated successfully",
@@ -453,11 +464,8 @@ async def analyze_resume(user_id: str, file: UploadFile = File(...)):
         }
         
     except Exception as e:
-        print(f"Error in analyze_resume: {str(e)}")  # Debug log
-        raise HTTPException(
-            status_code=500,
-            detail=f"Error processing resume: {str(e)}"
-        )
+        print(f"Error in analyze_resume: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error processing resume: {str(e)}")
 
 # Swiping and matching endpoints
 @app.post("/swipe/{user_id}")
@@ -471,33 +479,29 @@ async def swipe(user_id: str, swipe_data: SwipeRequest):
         swipe_record = {
             "swiper_id": swiper_id,
             "swiped_id": swiped_id,
-            "liked": swipe_data.liked,  # Always use 'liked' field
+            "liked": swipe_data.liked,
             "timestamp": datetime.utcnow()
         }
         swipes_collection.insert_one(swipe_record)
         
-        # Check if it's a match
         match_created = False
-        if swipe_data.liked:
-            # Check if the other person has already liked this user
-            other_swipe = swipes_collection.find_one({
-                "swiper_id": swiped_id,
-                "swiped_id": swiper_id,
-                "$or": [
-                    {"liked": True},
-                    {"action": "right"}  # Handle legacy swipes
-                ]
-            })
-            
-            if other_swipe:
-                # Create a match
-                match_record = {
-                    "user1_id": swiper_id,
-                    "user2_id": swiped_id,
-                    "timestamp": datetime.utcnow()
-                }
-                matches_collection.insert_one(match_record)
-                match_created = True
+        
+        # Check if the other person has already swiped on this user
+        other_swipe = swipes_collection.find_one({
+            "swiper_id": swiped_id,
+            "swiped_id": swiper_id,
+            "liked": True
+        })
+        
+        if swipe_data.liked and other_swipe:
+            # Create a match if both users liked each other
+            match_record = {
+                "user1_id": swiper_id,
+                "user2_id": swiped_id,
+                "timestamp": datetime.utcnow()
+            }
+            matches_collection.insert_one(match_record)
+            match_created = True
         
         return {"success": True, "match_created": match_created}
         
@@ -526,115 +530,117 @@ async def get_matches(user_id: str):
         for match in match_records:
             # Determine which user is the matched user
             other_user_id = match["user2_id"] if match["user1_id"] == user_oid else match["user1_id"]
-            matched_user = users_collection.find_one({"_id": other_user_id})
+            
+            # Get the matched user's profile with contact_email
+            matched_user = users_collection.find_one(
+                {"_id": other_user_id},
+                {
+                    "_id": 1,
+                    "name": 1,
+                    "skills": 1,
+                    "experience": 1,
+                    "tags": 1,
+                    "background": 1,
+                    "school": 1,
+                    "contact_email": 1,  # Make sure to include contact_email
+                    "email": 1  # Also include the registration email as fallback
+                }
+            )
             
             if matched_user:
                 # Convert ObjectId to string for JSON serialization
                 matched_user["_id"] = str(matched_user["_id"])
+                
+                # Use contact_email if available, otherwise use registration email
+                if not matched_user.get("contact_email"):
+                    matched_user["contact_email"] = matched_user.get("email", "")
+                
                 matches.append({
-                    "matched_user": matched_user,
+                    "user": matched_user,
                     "timestamp": match["timestamp"]
                 })
         
+        print("Matches with contact info:", matches)  # Debug log
         return matches
         
-    except Exception as e:
+    except InvalidId:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Error fetching matches: {str(e)}"
+            detail="Invalid user_id format"
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e)
         )
 
 @app.get("/pending-matches/{user_id}")
 async def get_pending_matches(user_id: str):
     try:
-        # Convert string ID to ObjectId
+        if not user_id or user_id == "null":
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid user_id provided"
+            )
+        
         user_oid = ObjectId(user_id)
-        
-        # Find all pending matches (both incoming and outgoing)
         pending_profiles = []
-        
-        # Find users who you've swiped right on (outgoing)
-        outgoing_swipes = swipes_collection.find({
+
+        # Get all outgoing swipes where user swiped right
+        outgoing_swipes = list(swipes_collection.find({
             "swiper_id": user_oid,
-            "$or": [
-                {"liked": True},
-                {"action": "right"}
-            ]
-        })
+            "liked": True
+        }))
         
         for swipe in outgoing_swipes:
-            # Check if the other person has rejected
-            other_swipe = swipes_collection.find_one({
-                "swiper_id": swipe["swiped_id"],
-                "swiped_id": user_oid,
+            # Check if there's already a match
+            match_exists = matches_collection.find_one({
                 "$or": [
-                    {"liked": False},
-                    {"action": "left"}
+                    {"user1_id": user_oid, "user2_id": swipe["swiped_id"]},
+                    {"user1_id": swipe["swiped_id"], "user2_id": user_oid}
                 ]
             })
             
-            # If no response yet and no match exists
-            if not other_swipe:
-                match_exists = matches_collection.find_one({
-                    "$or": [
-                        {"user1_id": user_oid, "user2_id": swipe["swiped_id"]},
-                        {"user1_id": swipe["swiped_id"], "user2_id": user_oid}
-                    ]
-                })
-                
-                if not match_exists:
-                    other_user = users_collection.find_one({"_id": swipe["swiped_id"]})
-                    if other_user:
-                        other_user["_id"] = str(other_user["_id"])
-                        pending_profiles.append({
-                            "user": other_user,
-                            "timestamp": swipe["timestamp"],
-                            "type": "outgoing"  # You swiped right on them
-                        })
+            if not match_exists:
+                # Get the other user's profile
+                other_user = users_collection.find_one({"_id": swipe["swiped_id"]})
+                if other_user:
+                    # Check if they've swiped on you
+                    their_swipe = swipes_collection.find_one({
+                        "swiper_id": swipe["swiped_id"],
+                        "swiped_id": user_oid
+                    })
+                    
+                    # Determine the status based on their swipe
+                    status = "pending"
+                    if their_swipe:
+                        if their_swipe["liked"]:
+                            status = "accepted"
+                        else:
+                            status = "rejected"
+                    
+                    # Convert ObjectId to string
+                    other_user["_id"] = str(other_user["_id"])
+                    
+                    pending_profiles.append({
+                        "user": other_user,
+                        "timestamp": swipe["timestamp"],
+                        "status": status,
+                        "type": "outgoing"
+                    })
         
-        # Find users who have swiped right on you (incoming)
-        incoming_swipes = swipes_collection.find({
-            "swiped_id": user_oid,
-            "$or": [
-                {"liked": True},
-                {"action": "right"}
-            ]
-        })
-        
-        for swipe in incoming_swipes:
-            # Check if you haven't responded yet
-            your_swipe = swipes_collection.find_one({
-                "swiper_id": user_oid,
-                "swiped_id": swipe["swiper_id"]
-            })
-            
-            # Only include if you haven't swiped yet and no match exists
-            if not your_swipe:
-                match_exists = matches_collection.find_one({
-                    "$or": [
-                        {"user1_id": user_oid, "user2_id": swipe["swiper_id"]},
-                        {"user1_id": swipe["swiper_id"], "user2_id": user_oid}
-                    ]
-                })
-                
-                if not match_exists:
-                    other_user = users_collection.find_one({"_id": swipe["swiper_id"]})
-                    if other_user:
-                        other_user["_id"] = str(other_user["_id"])
-                        pending_profiles.append({
-                            "user": other_user,
-                            "timestamp": swipe["timestamp"],
-                            "type": "incoming"  # They swiped right on you
-                        })
-        
-        print("Pending profiles:", pending_profiles)  # Debug log
+        print(f"Pending profiles for user {user_id}:", pending_profiles)  # Debug log
         return pending_profiles
-        
-    except Exception as e:
-        print(f"Error in pending matches: {str(e)}")
+
+    except InvalidId:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Error fetching pending matches: {str(e)}"
+            detail="Invalid user_id format"
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e)
         )
 
 # Initialize MongoDB collections at startup
