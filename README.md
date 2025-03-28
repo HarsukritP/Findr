@@ -1,6 +1,8 @@
 # 🔍 Findr – AI-Powered Hackathon Team Formation
 
-**Findr** is a smart matchmaking platform built for hackers, by hackers. Whether you're looking to form the perfect team before a hackathon or discover last-minute teammates who complement your skills, Findr uses AI to help you build, match, and win.
+**Findr** is a smart matchmaking platform built for hackers, by hackers. Whether you're looking to form the perfect team before a hackathon or discover last-minute teammates who complement your skills, Findr uses AI to help you build, match, and win. 
+
+This was used to compete in GenAI Genesis 2025 Hackathon. Our team consisted of HarsukritP, Vishnu123vis, JaedonVisva VivaanChugh
 
 ## 🚀 How It Works
 
